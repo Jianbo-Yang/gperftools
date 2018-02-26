@@ -4,11 +4,11 @@
 # make sure we're interpreted by some minimal autoconf
 AC_PREREQ([2.59])
 
-AC_INIT([gperftools],[2.6.1],[gperftools@googlegroups.com])
+AC_INIT([gperftools],[2.6.3],[gperftools@googlegroups.com])
 # Update this value for every release!  (A:B:C will map to foo.so.(A-C).C.B)
 # http://www.gnu.org/software/libtool/manual/html_node/Updating-version-info.html
-TCMALLOC_SO_VERSION=8:5:4
-PROFILER_SO_VERSION=4:14:4
+TCMALLOC_SO_VERSION=9:1:5
+PROFILER_SO_VERSION=4:16:4
 
 AC_SUBST(TCMALLOC_SO_VERSION)
 AC_SUBST(PROFILER_SO_VERSION)
@@ -381,6 +381,44 @@ AC_CACHE_CHECK([if C++ compiler supports -fsized-deallocation],
 
 AM_CONDITIONAL(HAVE_SIZED_DEALLOCATION,
                test "$perftools_cv_sized_deallocation_result" = yes)
+
+AC_CACHE_CHECK([if C++ compiler supports std::align_val_t without options],
+               [perftools_cv_have_align_val_t],
+               [AC_LANG_PUSH(C++)
+                AC_LINK_IFELSE([AC_LANG_PROGRAM(
+                    [[#include <new>]],
+                    [[(::operator delete)((::operator new)(256, std::align_val_t(16)), std::align_val_t(16))]])],
+                 perftools_cv_have_align_val_t=yes,
+                 perftools_cv_have_align_val_t=no)
+                AC_LANG_POP(C++)])
+
+AC_CACHE_CHECK([if C++ compiler supports -faligned-new],
+               [perftools_cv_have_f_aligned_new],
+               [AC_LANG_PUSH(C++)
+                OLD_CXXFLAGS="$CXXFLAGS"
+                CXXFLAGS="$CXXFLAGS -faligned-new"
+                AC_LINK_IFELSE([AC_LANG_PROGRAM(
+                    [[#include <new>]],
+                    [[(::operator delete)((::operator new)(256, std::align_val_t(16)), std::align_val_t(16))]])],
+                 perftools_cv_have_f_aligned_new=yes,
+                 perftools_cv_have_f_aligned_new=no)
+                CXXFLAGS="$OLD_CXXFLAGS"
+                AC_LANG_POP(C++)])
+
+AM_CONDITIONAL(HAVE_F_ALIGNED_NEW,
+               test "$perftools_cv_have_f_aligned_new" = yes)
+
+AS_IF([test "$perftools_cv_have_align_val_t" = yes || test "$perftools_cv_have_f_aligned_new" = yes],
+        [AC_DEFINE([ENABLE_ALIGNED_NEW_DELETE], 1, [Build new/delete operators for overaligned types])
+         AC_MSG_NOTICE([Will build new/delete operators for overaligned types])],
+         AC_MSG_NOTICE([Will not build new/delete operators for overaligned types]))
+
+if test "$perftools_cv_have_align_val_t" = yes || test "$perftools_cv_have_f_aligned_new" = yes; then
+  AC_SUBST(ac_cv_have_std_align_val_t, 1)   # gperftools/tcmalloc.h and windows/gperftools/tcmalloc.h need this
+else
+  AC_SUBST(ac_cv_have_std_align_val_t, 0)
+fi
+
 
 AC_CACHE_CHECK([if target has _Unwind_Backtrace],
                [perftools_cv_have_unwind_backtrace],
